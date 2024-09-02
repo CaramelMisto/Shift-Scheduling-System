@@ -1,6 +1,6 @@
 
 package repository;
-import main.Employee;
+import test.Employee;
 
 import java.io.IOException;
 import java.io.InputStream;
