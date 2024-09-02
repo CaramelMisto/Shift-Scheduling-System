@@ -1,4 +1,4 @@
-package com.example.shift2.main;
+package main;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,10 +41,6 @@ public class Employee {
 
     public String getShift(int day) {
         return shifts[day];
-    }
-
-    public void setName(String name) {
-        this.name = name;
     }
 
     public void setSpecialLeaveDays(List<Integer> days) {

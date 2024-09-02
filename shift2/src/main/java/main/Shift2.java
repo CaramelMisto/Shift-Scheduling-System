@@ -1,9 +1,9 @@
-package com.example.shift2.main;
+package main;
 
 
-import com.example.shift2.repository.databasemanager;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import repository.databasemanager;
 
 import java.io.FileOutputStream;
 import java.io.IOException;

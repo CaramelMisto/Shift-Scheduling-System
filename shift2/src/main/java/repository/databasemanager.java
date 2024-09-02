@@ -1,13 +1,12 @@
 
-package com.example.shift2.repository;
-import com.example.shift2.main.Employee;
+package repository;
+import main.Employee;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.sql.*;
 import java.util.List;
-
-
-
-import javax.swing.*;
+import java.util.Properties;
 
 public class databasemanager {
     static final int TOTAL_DAYS = 7;
@@ -16,16 +15,23 @@ public class databasemanager {
 
     // Initialize the database connection
     public static void initializeDatabaseConnection() throws SQLException {
-        String url = "jdbc:postgresql://localhost:5432/Employees"; // Change 'Employees' to your database name
-        String user = "postgres"; // Change to your PostgreSQL username
-        String password = "123"; // Change to your PostgreSQL password
+        try (InputStream input = databasemanager.class.getClassLoader().getResourceAsStream("application.properties")) {
+            Properties prop = new Properties();
+            prop.load(input);
 
-        // Establish the connection
-        connection = DriverManager.getConnection(url, user, password);
-        System.out.println("Connected to the database!");
+            String url = prop.getProperty("db.url");
+            String username = prop.getProperty("db.username");
+            String password = prop.getProperty("db.password");
+
+            // Establish the connection
+            connection = DriverManager.getConnection(url, username, password);
+            System.out.println("Connected to the database!");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    // Close the database connection
+        // Close the database connection
     public static void closeDatabaseConnection() {
         try {
             if (connection != null && !connection.isClosed()) {
