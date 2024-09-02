@@ -1,6 +1,7 @@
-package com.example.shift2;
+package com.example.shift2.main;
 
 
+import com.example.shift2.repository.databasemanager;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
@@ -24,14 +25,13 @@ public class Shift2 {
     private static final int MIN_NIGHT_SHIFT = 1;
     private static final int MAX_OFF_PER_DAY = 3;
 
-    private static Connection connection;
 
     public static void main(String[] args) {
         try {
             // Initialize the database connection
-            initializeDatabaseConnection();
+            databasemanager.initializeDatabaseConnection();
 
-            Shift2GUI  inputGUI = new Shift2GUI ();
+            Shift2GUI inputGUI = new Shift2GUI ();
             List<String> actualEmployeeNames = inputGUI.getEmployeeNames();
 
             if (actualEmployeeNames.size() != TOTAL_EMPLOYEES) {
@@ -227,87 +227,17 @@ public class Shift2 {
             workbook.close();
 
             // Save summary data to the database
-            int weekNumber = getNextWeekNumber();
-            saveShiftSummaryToDatabase(weekNumber, employees);
+            int weekNumber = databasemanager.getNextWeekNumber();
+            databasemanager.saveShiftSummaryToDatabase(weekNumber, employees);
 
         } catch (SQLException | IOException e) {
             e.printStackTrace();
         } finally {
             // Close the connection
-            closeDatabaseConnection();
+            databasemanager.closeDatabaseConnection();
         }
     }
 
-    // Initialize the database connection
-    private static void initializeDatabaseConnection() throws SQLException {
-        String url = "jdbc:postgresql://localhost:5432/Employees"; // Change 'Employees' to your database name
-        String user = "postgres"; // Change to your PostgreSQL username
-        String password = "123"; // Change to your PostgreSQL password
-
-        // Establish the connection
-        connection = DriverManager.getConnection(url, user, password);
-        System.out.println("Connected to the database!");
-    }
-
-    // Close the database connection
-    private static void closeDatabaseConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-                System.out.println("Connection closed!");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    // Retrieve the next week number
-    private static int getNextWeekNumber() throws SQLException {
-        String sql = "SELECT COALESCE(MAX(week_number), 0) + 1 FROM Employees";
-        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-            if (rs.next()) {
-                return rs.getInt(1); // Increment the week number
-            } else {
-                return 1; // Start with week 1 if no records exist
-            }
-        }
-    }
-
-    // Save shift summary to the database
-    private static void saveShiftSummaryToDatabase(int weekNumber, List<Employee> employees) throws SQLException {
-        String sql = "INSERT INTO Employees (name, week_number, monday, tuesday, wednesday, thursday, friday, saturday, sunday, morning_shifts, afternoon_shifts, night_shifts, special_leave_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-            for (Employee employee : employees) {
-                int morningCount = 0;
-                int afternoonCount = 0;
-                int nightCount = 0;
-
-                // Count shifts
-                for (int day = 0; day < TOTAL_DAYS; day++) {
-                    String shift = employee.getShift(day);
-                    if (shift.equals("09.00-18.00")) morningCount++;
-                    else if (shift.equals("17.00-01.00")) afternoonCount++;
-                    else if (shift.equals("01.00-09.00")) nightCount++;
-                }
-
-                pstmt.setString(1, employee.getName());
-                pstmt.setInt(2, weekNumber);
-                pstmt.setString(3, employee.getShift(0)); // Monday
-                pstmt.setString(4, employee.getShift(1)); // Tuesday
-                pstmt.setString(5, employee.getShift(2)); // Wednesday
-                pstmt.setString(6, employee.getShift(3)); // Thursday
-                pstmt.setString(7, employee.getShift(4)); // Friday
-                pstmt.setString(8, employee.getShift(5)); // Saturday
-                pstmt.setString(9, employee.getShift(6)); // Sunday
-                pstmt.setInt(10, morningCount);
-                pstmt.setInt(11, afternoonCount);
-                pstmt.setInt(12, nightCount);
-                pstmt.setString(13, employee.getSpecialLeaveDaysString()); // Special leave days
-                pstmt.addBatch();
-            }
-            pstmt.executeBatch();
-        }
-    }
     // Random day off assignment with a maximum of 3 people off per day, considering special leave days
     private static List<Integer> getRandomDaysOff(int totalDays, int daysOff, int[] offCounts, List<Integer> specialLeaveDays, Random random) {
         List<Integer> days = new ArrayList<>();

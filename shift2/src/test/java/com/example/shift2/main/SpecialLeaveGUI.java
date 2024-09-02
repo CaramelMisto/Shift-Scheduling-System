@@ -1,4 +1,4 @@
-package com.example.shift2;
+package com.example.shift2.main;
 
 import javax.swing.*;
 import java.awt.*;

@@ -1,10 +1,10 @@
-package com.example.shift2;
+package com.example.shift2.main;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-class Employee {
+public class Employee {
     private String name;
     private final String[] shifts = new String[7];
     private String assignedShift;
