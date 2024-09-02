@@ -4,9 +4,6 @@ package com.example.shift2;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import java.awt.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.sql.*;
@@ -18,10 +15,10 @@ import java.util.concurrent.CountDownLatch;
 import javax.swing.*;
 
 public class Shift2 {
-    private static final int TOTAL_DAYS = 7;
+    static final int TOTAL_DAYS = 7;
     private static final int TOTAL_EMPLOYEES = 8;
     private static final String[] SHIFTS = {"09.00-18.00", "17.00-01.00", "01.00-09.00"};
-    private static final String[] DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
+    public static final String[] DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
     private static final int MIN_MORNING_SHIFT = 2;
     private static final int MIN_AFTERNOON_SHIFT = 2;
     private static final int MIN_NIGHT_SHIFT = 1;
@@ -44,11 +41,31 @@ public class Shift2 {
             for (int i = 0; i < TOTAL_EMPLOYEES; i++) {
                 employees.add(new Employee(actualEmployeeNames.get(i)));
             }
+            int response = JOptionPane.showConfirmDialog(null,
+                    "Are there any special leaves needed?",
+                    "Special Leave",
+                    JOptionPane.YES_NO_OPTION);
 
             // Get special leave information from the user
-            boolean hasSpecialLeave = getSpecialLeaveStatusFromUser();
-            if (hasSpecialLeave) {
-                getSpecialLeaveFromUser(employees);
+            if (response == JOptionPane.YES_OPTION) {
+                // Use a new latch for synchronization
+                CountDownLatch specialLeaveLatch = new CountDownLatch(1);
+
+                // Display the Special Leave GUI
+                SpecialLeaveGUI specialLeaveGUI = new SpecialLeaveGUI(actualEmployeeNames, specialLeaveLatch);
+                specialLeaveGUI.display();
+                try {
+                    specialLeaveLatch.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                // Retrieve the special leave data from the GUI
+                List<List<Integer>> allSpecialLeaveDays = specialLeaveGUI.getAllSpecialLeaveDays();
+
+                // Update each employee with their special leave days
+                for (int i = 0; i < employees.size(); i++) {
+                    employees.get(i).setSpecialLeaveDays(allSpecialLeaveDays.get(i));
+                }
             }
 
             Random random = new Random();
@@ -171,18 +188,16 @@ public class Shift2 {
 
             }
 
-            // Vardiya programını Excel dosyasına kaydet
+            // Save the schedule to Excel
             Workbook workbook = new XSSFWorkbook();
             Sheet sheet = workbook.createSheet("Shift Schedule");
 
-// Excel tablosunun ilk satırına gün isimlerini ekliyoruz
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < DAYS.length; i++) {
                 Cell cell = headerRow.createCell(i + 1);
                 cell.setCellValue(DAYS[i]);
             }
 
-// Çalışanların isimlerini ve vardiyalarını tabloya ekliyoruz
             for (int i = 0; i < employees.size(); i++) {
                 Row row = sheet.createRow(i + 1);
                 row.createCell(0).setCellValue(employees.get(i).getName());
@@ -191,38 +206,36 @@ public class Shift2 {
                     String shift = employees.get(i).getShift(day);
                     cell.setCellValue(shift);
 
-                    // Vardiyaya göre hücre rengini ayarlıyoruz
+                    // Set cell color based on shift
                     if (shift.equals("09.00-18.00")) {
                         cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_YELLOW));
                     } else if (shift.equals("17.00-01.00")) {
                         cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_GREEN));
                     } else if (shift.equals("01.00-09.00")) {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_CORNFLOWER_BLUE));
-                    } else if (shift.equals("IZINLI")) {
+                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_CORNFLOWER_BLUE));}
+                    else if (shift.equals("IZINLI")) {
                         cell.setCellStyle(getCellStyle(workbook, IndexedColors.PINK));
                     } else {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.AQUA)); // Off günleri için
+                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.AQUA)); // For Off
                     }
                 }
             }
 
             try (FileOutputStream fileOut = new FileOutputStream("ShiftSchedule.xlsx")) {
-                // Excel dosyasını kaydediyoruz
                 workbook.write(fileOut);
             }
             workbook.close();
 
-// Özet verilerini veritabanına kaydet
+            // Save summary data to the database
             int weekNumber = getNextWeekNumber();
             saveShiftSummaryToDatabase(weekNumber, employees);
 
         } catch (SQLException | IOException e) {
             e.printStackTrace();
         } finally {
-            // Veritabanı bağlantısını kapatıyoruz
+            // Close the connection
             closeDatabaseConnection();
         }
-
     }
 
     // Initialize the database connection
@@ -260,7 +273,7 @@ public class Shift2 {
         }
     }
 
-    // Vardiya özetini veritabanına kaydet
+    // Save shift summary to the database
     private static void saveShiftSummaryToDatabase(int weekNumber, List<Employee> employees) throws SQLException {
         String sql = "INSERT INTO Employees (name, week_number, monday, tuesday, wednesday, thursday, friday, saturday, sunday, morning_shifts, afternoon_shifts, night_shifts, special_leave_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
@@ -269,7 +282,7 @@ public class Shift2 {
                 int afternoonCount = 0;
                 int nightCount = 0;
 
-                // Vardiya sayılarını hesapla
+                // Count shifts
                 for (int day = 0; day < TOTAL_DAYS; day++) {
                     String shift = employee.getShift(day);
                     if (shift.equals("09.00-18.00")) morningCount++;
@@ -277,51 +290,24 @@ public class Shift2 {
                     else if (shift.equals("01.00-09.00")) nightCount++;
                 }
 
-                // Çalışan bilgilerini ve vardiya sayılarını veritabanına ekle
                 pstmt.setString(1, employee.getName());
                 pstmt.setInt(2, weekNumber);
-                pstmt.setString(3, employee.getShift(0)); // Pazartesi
-                pstmt.setString(4, employee.getShift(1)); // Salı
-                pstmt.setString(5, employee.getShift(2)); // Çarşamba
-                pstmt.setString(6, employee.getShift(3)); // Perşembe
-                pstmt.setString(7, employee.getShift(4)); // Cuma
-                pstmt.setString(8, employee.getShift(5)); // Cumartesi
-                pstmt.setString(9, employee.getShift(6)); // Pazar
-                pstmt.setInt(10, morningCount); // Sabah vardiyası sayısı
-                pstmt.setInt(11, afternoonCount); // Öğleden sonra vardiyası sayısı
-                pstmt.setInt(12, nightCount); // Gece vardiyası sayısı
-                pstmt.setString(13, employee.getSpecialLeaveDaysString()); // Özel izin günleri
-                pstmt.addBatch(); // İşlemi toplu olarak yürütmek için ekle
+                pstmt.setString(3, employee.getShift(0)); // Monday
+                pstmt.setString(4, employee.getShift(1)); // Tuesday
+                pstmt.setString(5, employee.getShift(2)); // Wednesday
+                pstmt.setString(6, employee.getShift(3)); // Thursday
+                pstmt.setString(7, employee.getShift(4)); // Friday
+                pstmt.setString(8, employee.getShift(5)); // Saturday
+                pstmt.setString(9, employee.getShift(6)); // Sunday
+                pstmt.setInt(10, morningCount);
+                pstmt.setInt(11, afternoonCount);
+                pstmt.setInt(12, nightCount);
+                pstmt.setString(13, employee.getSpecialLeaveDaysString()); // Special leave days
+                pstmt.addBatch();
             }
-            pstmt.executeBatch(); // Tüm verileri veritabanına toplu olarak ekle
+            pstmt.executeBatch();
         }
     }
-
-
-    // Get special leave status from user
-    private static boolean getSpecialLeaveStatusFromUser() {
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Are there any employees with special leave? (yes/no): ");
-        String input = scanner.nextLine().trim().toLowerCase();
-        return input.equals("yes");
-    }
-
-    // Get special leave details from user
-    private static void getSpecialLeaveFromUser(List<Employee> employees) {
-        Scanner scanner = new Scanner(System.in);
-
-        for (Employee employee : employees) {
-            System.out.print("Does " + employee.getName() + " have special leave? (yes/no): ");
-            String input = scanner.nextLine().trim().toLowerCase();
-            if (input.equals("yes")) {
-                System.out.print("Enter the days off for " + employee.getName() + " (comma-separated, e.g., 0,2 for Monday and Wednesday): ");
-                String daysOffInput = scanner.nextLine().trim();
-                List<Integer> daysOff = new ArrayList<>();
-                for (String day : daysOffInput.split(",")) {
-                    try {daysOff.add(Integer.parseInt(day.trim()));}
-                    catch (NumberFormatException e) {System.out.println("Invalid day format. Skipping.");}}
-                employee.setSpecialLeaveDays(daysOff);}}}
-
     // Random day off assignment with a maximum of 3 people off per day, considering special leave days
     private static List<Integer> getRandomDaysOff(int totalDays, int daysOff, int[] offCounts, List<Integer> specialLeaveDays, Random random) {
         List<Integer> days = new ArrayList<>();
@@ -378,135 +364,5 @@ public class Shift2 {
         return style;
     }
 
-    // Retrieve the list of employee names from the database
-    private static List<String> getEmployeeNamesFromDatabase() throws SQLException {
-        List<String> names = new ArrayList<>();
-        String sql = "SELECT name FROM Employees"; // Adjust this to your actual table
-        try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-            while (rs.next()) {
-                names.add(rs.getString("name"));
-            }
-        }
-        return names;
-    }
-
-    public static class Shift2GUI extends JFrame{
-
-        private JFrame frame;
-        private JTextField[] nameFields;
-        private static final int TOTAL_EMPLOYEES = 8;
-        private Connection connection;
-        private List<String> employeeNames;
-        private CountDownLatch latch = new CountDownLatch(1);
-
-        public Shift2GUI() {
-            initialize();
-        }
-
-
-        private void initialize() {
-            frame = new JFrame("Employee Input");
-            frame.setBounds(100, 100, 450, 300);
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.getContentPane().setLayout(new GridLayout(TOTAL_EMPLOYEES + 1, 2));
-
-            JLabel[] labels = new JLabel[TOTAL_EMPLOYEES];
-            nameFields = new JTextField[TOTAL_EMPLOYEES];
-
-            for (int i = 0; i < TOTAL_EMPLOYEES; i++) {
-                labels[i] = new JLabel("Employee " + (i + 1) + ":");
-                nameFields[i] = new JTextField();
-                frame.getContentPane().add(labels[i]);
-                frame.getContentPane().add(nameFields[i]);
-            }
-
-            JButton btnSubmit = new JButton("Submit");
-            btnSubmit.addActionListener(new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    submitData();
-                    latch.countDown(); // Signal that names have been entered
-                    frame.dispose(); // Close the GUI
-                }
-            });
-            frame.getContentPane().add(btnSubmit);
-
-            frame.setVisible(true);
-        }
-
-        private void submitData() {
-            employeeNames = new ArrayList<>();  // Initialize the list
-            for (JTextField field : nameFields) {
-                String name = field.getText().trim();
-                if (!name.isEmpty()) {
-                    employeeNames.add(name);  // Add names to employeeNames list
-                }
-            }
-            if (employeeNames.size() == TOTAL_EMPLOYEES) {  // Check employeeNames list
-                try {
-                    initializeDatabaseConnection();
-                    saveEmployeeNamesToDatabase(employeeNames);
-                    JOptionPane.showMessageDialog(frame, "Data saved successfully!");
-                    latch.countDown(); // Signal that names have been entered
-                    frame.dispose(); // Close the GUI
-                } catch (SQLException ex) {
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(frame, "Error saving data: " + ex.getMessage());
-                } finally {
-                    closeDatabaseConnection();
-                }
-            } else {
-                JOptionPane.showMessageDialog(frame, "Please enter names for all employees.");
-            }
-        }
-
-        public List<String> getEmployeeNames() {
-            // Wait for the user to close the GUI
-            try {
-                latch.await(); // Wait until the latch count down is called
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            return employeeNames;
-        }
-
-        private void initializeDatabaseConnection() throws SQLException {
-            String url = "jdbc:postgresql://localhost:5432/Employees";
-            String user = "postgres";
-            String password = "123";
-            connection = DriverManager.getConnection(url, user, password);
-        }
-
-        private void closeDatabaseConnection() {
-            try {
-                if (connection != null && !connection.isClosed()) {
-                    connection.close();
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        }
-
-        private void saveEmployeeNamesToDatabase(List<String> names) throws SQLException {
-            String sql = "INSERT INTO Employees (name) VALUES (?)";
-            try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
-                for (String name : names) {
-                    pstmt.setString(1, name);
-                    pstmt.addBatch();
-                }
-                pstmt.executeBatch();
-            }
-        }
-
-        public static void main(String[] args) {
-            Shift2GUI gui = new Shift2GUI();
-            List<String> employeeNames = gui.getEmployeeNames();  // Wait until names are entered
-
-            // Validate that the correct number of names have been entered
-            if (employeeNames.size() != TOTAL_EMPLOYEES) {
-                throw new IllegalArgumentException("The number of employee names provided does not match the total number of employees.");
-            }
-        }
-    }
 }
 
