@@ -1,5 +1,7 @@
 
 package repository;
+
+
 import test.Employee;
 
 import java.io.IOException;
@@ -31,7 +33,7 @@ public class databasemanager {
         }
     }
 
-        // Close the database connection
+    // Close the database connection
     public static void closeDatabaseConnection() {
         try {
             if (connection != null && !connection.isClosed()) {

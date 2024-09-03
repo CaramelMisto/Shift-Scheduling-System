@@ -1,13 +1,12 @@
 package test;
 
-
-import repository.databasemanager;
-
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,13 +66,14 @@ public class Shift2GUI extends JFrame {
         }
         if (employeeNames.size() == TOTAL_EMPLOYEES) {  // Check employeeNames list
             try {
-                databasemanager.initializeDatabaseConnection();
+                initializeDatabaseConnection();
+
                 JOptionPane.showMessageDialog(frame, "Data saved successfully!");
             } catch (SQLException ex) {
                 ex.printStackTrace();
                 JOptionPane.showMessageDialog(frame, "Error saving data: " + ex.getMessage());
             } finally {
-                databasemanager.closeDatabaseConnection();
+                closeDatabaseConnection();
             }
 
             // Notify that names have been entered
@@ -93,5 +93,24 @@ public class Shift2GUI extends JFrame {
         }
         return employeeNames;
     }
+
+    private void initializeDatabaseConnection() throws SQLException {
+        String url = "jdbc:postgresql://localhost:5432/Employees";
+        String user = "postgres";
+        String password = "123";
+        connection = DriverManager.getConnection(url, user, password);
+    }
+
+    private void closeDatabaseConnection() {
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
 
 }

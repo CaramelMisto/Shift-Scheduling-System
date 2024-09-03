@@ -43,6 +43,10 @@ public class Employee {
         return shifts[day];
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     public void setSpecialLeaveDays(List<Integer> days) {
         this.specialLeaveDays.clear();
         this.specialLeaveDays.addAll(days);

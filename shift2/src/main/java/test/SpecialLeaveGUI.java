@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-class SpecialLeaveGUI {
+public class SpecialLeaveGUI {
     private JFrame frame;
     private List<JCheckBox[]> leaveCheckBoxes; // List to hold checkboxes for each employee
     private List<String> employeeNames;
