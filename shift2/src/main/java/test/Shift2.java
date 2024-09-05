@@ -24,6 +24,10 @@ public class Shift2 {
     private static final int MIN_AFTERNOON_SHIFT = 2;
     private static final int MIN_NIGHT_SHIFT = 1;
     private static final int MAX_OFF_PER_DAY = 3;
+    private static final int TOTAL_WEEKS = 4;  // Number of weeks to schedule
+    private static final int ROWS_BETWEEN_WEEKS = 2;
+    public static List<List<Integer>> leaveWeeks = new ArrayList<>();
+    public static List<List<Integer>> allSpecialLeaveDays = new ArrayList<>();// Space between weeks in Excel
 
 
     public static void main(String[] args) {
@@ -31,93 +35,103 @@ public class Shift2 {
             // Initialize the database connection
             databasemanager.initializeDatabaseConnection();
 
-            Shift2GUI inputGUI = new Shift2GUI ();
+            Shift2GUI inputGUI = new Shift2GUI();
             List<String> actualEmployeeNames = inputGUI.getEmployeeNames();
 
             if (actualEmployeeNames.size() != TOTAL_EMPLOYEES) {
                 throw new IllegalArgumentException("The number of employee names provided does not match the total number of employees.");
             }
+
             List<Employee> employees = new ArrayList<>();
             for (int i = 0; i < TOTAL_EMPLOYEES; i++) {
                 employees.add(new Employee(actualEmployeeNames.get(i)));
             }
+
             int response = JOptionPane.showConfirmDialog(null,
                     "Are there any special leaves needed?",
                     "Special Leave",
                     JOptionPane.YES_NO_OPTION);
 
-            // Get special leave information from the user
             if (response == JOptionPane.YES_OPTION) {
-                // Use a new latch for synchronization
                 CountDownLatch specialLeaveLatch = new CountDownLatch(1);
-
-                // Display the Special Leave GUI
-                SpecialLeaveGUI specialLeaveGUI = new SpecialLeaveGUI(actualEmployeeNames, specialLeaveLatch);
+                SpecialLeaveGUI specialLeaveGUI = new SpecialLeaveGUI(actualEmployeeNames, employees,specialLeaveLatch);
                 specialLeaveGUI.display();
                 try {
                     specialLeaveLatch.await();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-                // Retrieve the special leave data from the GUI
-                List<List<Integer>> allSpecialLeaveDays = specialLeaveGUI.getAllSpecialLeaveDays();
 
-                // Update each employee with their special leave days
+                allSpecialLeaveDays = SpecialLeaveGUI.getAllSpecialLeaveDays();
+                leaveWeeks = SpecialLeaveGUI.getLeaveWeeks();
                 for (int i = 0; i < employees.size(); i++) {
                     employees.get(i).setSpecialLeaveDays(allSpecialLeaveDays.get(i));
+                    employees.get(i).setSpecialLeaveWeeks(leaveWeeks.get(i));
                 }
             }
 
-            Random random = new Random();
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("Shift Schedule");
 
-            // Initialize daily shift counts
-            int[] morningCounts = new int[TOTAL_DAYS];
-            int[] afternoonCounts = new int[TOTAL_DAYS];
-            int[] nightCounts = new int[TOTAL_DAYS];
-            int[] offCounts = new int[TOTAL_DAYS]; // Count of employees off each day
+            for (int week = 0; week < TOTAL_WEEKS; week++) {
+                generateWeeklySchedule(week, employees, sheet, workbook);
+            }
 
+            try (FileOutputStream fileOut = new FileOutputStream("ShiftSchedule.xlsx")) {
+                workbook.write(fileOut);
+            }
+            workbook.close();
 
-            // Assign shifts to employees
-            for (Employee employee : employees) {
-                String assignedShift = SHIFTS[random.nextInt(SHIFTS.length)];
-                employee.setAssignedShift(assignedShift);
+        } catch (SQLException | IOException e) {
+            e.printStackTrace();
+        } finally {
+            databasemanager.closeDatabaseConnection();
+        }
+    }
 
-                // Randomly assign 2 days off with a maximum of 3 people off per day
-                List<Integer> daysOff = getRandomDaysOff(TOTAL_DAYS, 2, offCounts, employee.getSpecialLeaveDays(), random);
-                for (int day : daysOff) {
-                    employee.setOff(day);
-                    offCounts[day]++;
-                }
+    private static void generateWeeklySchedule(int week, List<Employee> employees, Sheet sheet, Workbook workbook) throws SQLException {
+        Random random = new Random();
 
-                // Assign shifts ensuring minimum requirements and no more than 3 off per day
-                for (int day = 0; day < TOTAL_DAYS; day++) {
-                    if (employee.getSpecialLeaveDays().contains(day)) {
-                        employee.setShift(day, "IZINLI"); // Set to "IZINLI"
-                        continue; // Skip the rest of the logic for this day
-                    }
+        // Initialize daily shift counts
+        int[] morningCounts = new int[TOTAL_DAYS];
+        int[] afternoonCounts = new int[TOTAL_DAYS];
+        int[] nightCounts = new int[TOTAL_DAYS];
+        int[] offCounts = new int[TOTAL_DAYS];
 
+        for (Employee employee : employees) {
+            employee.resetOffDays();  // add this method to reset off days in Employee class
+        }
 
+        // Assign shifts to employees
+        for (int i = 0; i < employees.size(); i++) {
+            Employee employee = employees.get(i);
+            String assignedShift = SHIFTS[random.nextInt(SHIFTS.length)];
+            employee.setAssignedShift(assignedShift);
+
+            // Randomly assign 2 days off with a maximum of 3 people off per day
+            List<Integer> daysOff = getRandomDaysOff(TOTAL_DAYS, 2, offCounts, employee.getSpecialLeaveDays(), random);
+            for (int day : daysOff) {
+                employee.setOff(day);
+                offCounts[day]++;
+            }
+
+            for (int day = 0; day < TOTAL_DAYS; day++) {
+                // Haftayı hesapla (7 günlük döngülerde)
+                // Calculate the actual day of the year// Bu hafta için doğru gün indeksini bul
+
+                // Mevcut haftaya uygun izin günlerini kontrol et
+                if (employee.getSpecialLeaveDays().contains(day) && employee.getSpecialLeaveWeeks().contains(week)) {
+                    employee.setShift(day, "IZINLI");
+                } else {
                     if (!employee.isOff(day)) {
                         String shift = assignedShift;
 
-                        // If previous shift was "Night", ensure the current shift is not "Morning"
                         if (day > 0 && employee.getShift(day - 1).equals("01.00-09.00")) {
                             if (shift.equals("09.00-18.00")) {
-                                shift = getAlternativeShift("09.00-18.00",  "01.00-09.00");
-                            }
-                        }
-                        if (day > 0 && employee.getShift(day - 1).equals("17.00-01.00")) {
-                            if (shift.equals("01.00-09.00")) {
-                                shift = getAlternativeShift("01.00-09.00", "17.00-01.00");
-                            }
-                        }
-                        if (day > 0 && employee.getShift(day - 1).equals("09.00-18.00")) {
-                            if (shift.equals("01.00-09.00")) {
-                                shift = getAlternativeShift("01.00-09.00",  "09.00-18.00");
+                                shift = getAlternativeShift("09.00-18.00", "01.00-09.00");
                             }
                         }
 
-                        // Adjust shift to meet daily requirements
                         if (shift.equals("09.00-18.00") && morningCounts[day] >= MIN_MORNING_SHIFT) {
                             shift = getAlternativeShift("09.00-18.00", "01.00-09.00");
                         } else if (shift.equals("17.00-01.00") && afternoonCounts[day] >= MIN_AFTERNOON_SHIFT) {
@@ -126,118 +140,48 @@ public class Shift2 {
                             shift = getAlternativeShift("01.00-09.00", "17.00-01.00");
                         }
 
-                        // Vardiya ataması günlük gereksinimleri karşılıyor mu diye kontrol et
-                        if (shift.equals("09.00-18.00") && morningCounts[day] < MIN_MORNING_SHIFT) {
-                            // Eğer önceki gün çalışanın vardiyası "01.00-09.00" ise, bu vardiyanın hemen ardından sabah vardiyası verilmesin
-                            if (day > 0 && employee.getShift(day - 1).equals("01.00-09.00")) {
-                                // Alternatif bir vardiya seç
-                                shift = getAlternativeShift("09.00-18.00",  "01.00-09.00");
-                            }
-                            // Çalışana vardiya ata
-                            employee.setShift(day, shift);
-                            // Sabah vardiya sayacını artır
-                            morningCounts[day]++;
-                        } else if (shift.equals("17.00-01.00") && afternoonCounts[day] < MIN_AFTERNOON_SHIFT) {
-                            // Eğer vardiya öğleden sonra ise ve minimum öğleden sonra vardiya gereksinimi karşılanmamışsa,
-                            // çalışana bu vardiyayı ata
-                            employee.setShift(day, shift);
-                            // Öğleden sonra vardiya sayacını artır
-                            afternoonCounts[day]++;
-                        } else if (shift.equals("01.00-09.00") && nightCounts[day] < MIN_NIGHT_SHIFT) {
-                            // Eğer vardiya gece ise ve minimum gece vardiya gereksinimi karşılanmamışsa,
-                            // ve önceki gün çalışanın vardiyası "09.00-18.00" ise, bu vardiyanın hemen ardından gece vardiyası verilmesin
-                            if (day > 0 && employee.getShift(day - 1).equals("09.00-18.00")) {
-                                // Alternatif bir vardiya seç
-                                shift = getAlternativeShift("01.00-09.00",  "09.00-18.00");
-                            }
-                            // Çalışana vardiya ata
-                            employee.setShift(day, shift);
-                            // Gece vardiya sayacını artır
-                            nightCounts[day]++;
-                        }
-                        else {
-                            // Eğer mevcut vardiya ataması gereksinimleri karşılamıyorsa, uygun bir vardiya bul
-                            String alternativeShift = findSuitableShift(day, morningCounts, afternoonCounts, nightCounts);
-
-                            // Eğer uygun vardiya "09.00-18.00" ise ve önceki gün çalışanın vardiyası "01.00-09.00" ise,
-                            // bu vardiyanın hemen ardından sabah vardiyası verilmesin
-                            if (alternativeShift.equals("09.00-18.00") && day > 0 && employee.getShift(day - 1).equals("01.00-09.00")) {
-                                // Alternatif bir vardiya seç
-                                alternativeShift = getAlternativeShift("09.00-18.00",  "01.00-09.00");
-                            }
-                            // Eğer uygun vardiya "01.00-09.00" ise ve önceki gün çalışanın vardiyası "09.00-18.00" ise,
-                            // bu vardiyanın hemen ardından gece vardiyası verilmesin
-                            else if (alternativeShift.equals("01.00-09.00") && day > 0 && employee.getShift(day - 1).equals("09.00-18.00")) {
-                                // Alternatif bir vardiya seç
-                                alternativeShift = getAlternativeShift("01.00-09.00",  "09.00-18.00");
-                            }
-                            else if (alternativeShift.equals("01.00-09.00") && day > 0 && employee.getShift(day - 1).equals("17.00-01.00")) {
-                                // Alternatif bir vardiya seç
-                                alternativeShift = getAlternativeShift("01.00-09.00",  "17.00-01.00");
-                            }
-
-                            // Çalışana uygun vardiyayı ata
-                            employee.setShift(day, alternativeShift);
-
-                            // İlgili vardiya sayacını güncelle
-                            updateShiftCounts(alternativeShift, day, morningCounts, afternoonCounts, nightCounts);
-                        }
-
-                    }
-                }
-
-            }
-
-            // Save the schedule to Excel
-            Workbook workbook = new XSSFWorkbook();
-            Sheet sheet = workbook.createSheet("Shift Schedule");
-
-            Row headerRow = sheet.createRow(0);
-            for (int i = 0; i < DAYS.length; i++) {
-                Cell cell = headerRow.createCell(i + 1);
-                cell.setCellValue(DAYS[i]);
-            }
-
-            for (int i = 0; i < employees.size(); i++) {
-                Row row = sheet.createRow(i + 1);
-                row.createCell(0).setCellValue(employees.get(i).getName());
-                for (int day = 0; day < TOTAL_DAYS; day++) {
-                    Cell cell = row.createCell(day + 1);
-                    String shift = employees.get(i).getShift(day);
-                    cell.setCellValue(shift);
-
-                    // Set cell color based on shift
-                    if (shift.equals("09.00-18.00")) {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_YELLOW));
-                    } else if (shift.equals("17.00-01.00")) {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_GREEN));
-                    } else if (shift.equals("01.00-09.00")) {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_CORNFLOWER_BLUE));}
-                    else if (shift.equals("IZINLI")) {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.PINK));
-                    } else {
-                        cell.setCellStyle(getCellStyle(workbook, IndexedColors.AQUA)); // For Off
+                        employee.setShift(day, shift);
+                        updateShiftCounts(shift, day, morningCounts, afternoonCounts, nightCounts);
                     }
                 }
             }
-
-            try (FileOutputStream fileOut = new FileOutputStream("ShiftSchedule.xlsx")) {
-                workbook.write(fileOut);
-            }
-            workbook.close();
-
-            // Save summary data to the database
-            int weekNumber = databasemanager.getNextWeekNumber();
-            databasemanager.saveShiftSummaryToDatabase(weekNumber, employees);
-
-        } catch (SQLException | IOException e) {
-            e.printStackTrace();
-        } finally {
-            // Close the connection
-            databasemanager.closeDatabaseConnection();
         }
-    }
 
+        int startRow = (week * (TOTAL_EMPLOYEES + ROWS_BETWEEN_WEEKS)) + 1;
+        int headerRowNumber = startRow - 1;
+        Row headerRow = sheet.createRow(headerRowNumber);
+        headerRow.createCell(0).setCellValue("Week " + (week + 1));
+        for (int i = 0; i < DAYS.length; i++) {
+            Cell cell = headerRow.createCell(i + 1);
+            cell.setCellValue(DAYS[i]);
+        }
+
+        for (int i = 0; i < employees.size(); i++) {
+            Row row = sheet.createRow(startRow + i);
+            row.createCell(0).setCellValue(employees.get(i).getName());
+            for (int day = 0; day < TOTAL_DAYS; day++) {
+                Cell cell = row.createCell(day + 1);
+                String shift = employees.get(i).getShift(day);
+                cell.setCellValue(shift);
+
+                if (shift.equals("09.00-18.00")) {
+                    cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_YELLOW));
+                } else if (shift.equals("17.00-01.00")) {
+                    cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_GREEN));
+                } else if (shift.equals("01.00-09.00")) {
+                    cell.setCellStyle(getCellStyle(workbook, IndexedColors.LIGHT_CORNFLOWER_BLUE));
+                } else if (shift.equals("IZINLI")) {
+                    cell.setCellStyle(getCellStyle(workbook, IndexedColors.PINK));
+                } else {
+                    cell.setCellStyle(getCellStyle(workbook, IndexedColors.AQUA));
+                }
+            }
+        }
+
+        // Save the week's schedule to the database
+        int weekNumber = databasemanager.getNextWeekNumber() + week;
+        databasemanager.saveShiftSummaryToDatabase(weekNumber, employees);
+    }
     // Random day off assignment with a maximum of 3 people off per day, considering special leave days
     private static List<Integer> getRandomDaysOff(int totalDays, int daysOff, int[] offCounts, List<Integer> specialLeaveDays, Random random) {
         List<Integer> days = new ArrayList<>();
@@ -295,4 +239,3 @@ public class Shift2 {
     }
 
 }
-

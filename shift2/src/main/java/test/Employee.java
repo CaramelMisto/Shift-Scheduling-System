@@ -10,6 +10,7 @@ public class Employee {
     private String assignedShift;
     private final boolean[] isOff = new boolean[7];
     private final List<Integer> specialLeaveDays = new ArrayList<>();
+    private List<Integer> specialLeaveWeeks;
 
     public Employee(String name) {
         this.name = name;
@@ -19,15 +20,26 @@ public class Employee {
     public String getName() {
         return name;
     }
+    public List<Integer> getSpecialLeaveWeeks() {
+        return specialLeaveWeeks;
+    }
+
+    public void setSpecialLeaveWeeks(List<Integer> specialLeaveWeeks) {
+        this.specialLeaveWeeks = specialLeaveWeeks;
+    }
+
 
     public void setAssignedShift(String shift) {
         this.assignedShift = shift;
     }
 
     public void setShift(int day, String shift) {
-        if (!isOff(day)) {
-            shifts[day] = shift;
+        if (shift.equals("IZINLI")) {
+            isOff[day] = false; // İzinli günlerde 'off' durumu yanlış olabilir
         }
+        shifts[day] = shift;
+
+
     }
 
     public void setOff(int day) {
@@ -59,4 +71,9 @@ public class Employee {
     public String getSpecialLeaveDaysString() {
         return String.join(",", specialLeaveDays.toString());
     }
+    public void resetOffDays() {
+        Arrays.fill(isOff, false);  // tüm günlerde izin durumunu false olarak ayarlar
+        Arrays.fill(shifts, "Off"); // tüm günleri "Off" olarak ayarlar
+    }
+
 }
