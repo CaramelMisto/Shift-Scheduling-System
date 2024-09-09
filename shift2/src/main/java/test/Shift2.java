@@ -18,16 +18,20 @@ import javax.swing.*;
 public class Shift2 {
     static final int TOTAL_DAYS = 7;
     private static final int TOTAL_EMPLOYEES = 8;
-    private static final String[] SHIFTS = {"09.00-18.00", "17.00-01.00", "01.00-09.00"};
+    private static final String[] SHIFTS = {"09.00-18.00", "17.00-01.00"};
     public static final String[] DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
     private static final int MIN_MORNING_SHIFT = 2;
     private static final int MIN_AFTERNOON_SHIFT = 2;
-    private static final int MIN_NIGHT_SHIFT = 1;
+    private static final int MIN_NIGHT_SHIFT = 1; // something missing
     private static final int MAX_OFF_PER_DAY = 3;
     private static final int TOTAL_WEEKS = 4;  // Number of weeks to schedule
     private static final int ROWS_BETWEEN_WEEKS = 2;
     public static List<List<Integer>> leaveWeeks = new ArrayList<>();
     public static List<List<Integer>> allSpecialLeaveDays = new ArrayList<>();// Space between weeks in Excel
+    private static List<Employee> previousWeekendOffEmployees = new ArrayList<>();
+    private static Map<Employee, Boolean> employeeHasWeekendOff = new HashMap<>();
+    private static Map<Employee, Boolean> employeeHasShift = new HashMap<>();
+    private static List<Employee> previousShiftEmployees = new ArrayList<>();
 
 
     public static void main(String[] args) {
@@ -102,18 +106,43 @@ public class Shift2 {
             employee.resetOffDays();  // add this method to reset off days in Employee class
         }
 
+        List<Employee> weekendOffEmployees = getWeekendOffEmployees(employees, previousWeekendOffEmployees, random);
+
+        for (Employee employee : weekendOffEmployees) {
+            employee.setOff(5); // Saturday
+            employee.setOff(6); // Sunday
+            offCounts[5]++;
+            offCounts[6]++;
+            employeeHasWeekendOff.put(employee, true);
+        }
+
+// Assign random days off to the remaining employees
+        for (Employee employee : employees) {
+            if (!weekendOffEmployees.contains(employee)) {
+                List<Integer> daysOff = getRandomDaysOff(TOTAL_DAYS, 2, offCounts, employee.getSpecialLeaveDays(), random);
+                for (int day : daysOff) {
+                    employee.setOff(day);
+                    offCounts[day]++;
+                }
+            }
+        }
+        // Update the previous week's employees
+        previousWeekendOffEmployees.clear();
+        previousWeekendOffEmployees.addAll(weekendOffEmployees);
         // Assign shifts to employees
+        List<Employee> NightShiftEmployees = getNightShiftEmployees(employees, previousShiftEmployees, random);
+
+        for (Employee employee : NightShiftEmployees) {
+            String assignedShift = "01.00-09.00";
+            employee.setAssignedShift(assignedShift);
+            employeeHasShift.put(employee, true);
+        }
         for (int i = 0; i < employees.size(); i++) {
+
             Employee employee = employees.get(i);
             String assignedShift = SHIFTS[random.nextInt(SHIFTS.length)];
             employee.setAssignedShift(assignedShift);
 
-            // Randomly assign 2 days off with a maximum of 3 people off per day
-            List<Integer> daysOff = getRandomDaysOff(TOTAL_DAYS, 2, offCounts, employee.getSpecialLeaveDays(), random);
-            for (int day : daysOff) {
-                employee.setOff(day);
-                offCounts[day]++;
-            }
 
             for (int day = 0; day < TOTAL_DAYS; day++) {
                 // Haftayı hesapla (7 günlük döngülerde)
@@ -124,28 +153,36 @@ public class Shift2 {
                     employee.setShift(day, "IZINLI");
                 } else {
                     if (!employee.isOff(day)) {
-                        String shift = assignedShift;
+                        if (!NightShiftEmployees.contains(employees.get(i))){
+                            String shift = assignedShift;
 
-                        if (day > 0 && employee.getShift(day - 1).equals("01.00-09.00")) {
-                            if (shift.equals("09.00-18.00")) {
-                                shift = getAlternativeShift("09.00-18.00", "01.00-09.00");
+                            if (day > 0 && employee.getShift(day - 1).equals("01.00-09.00")) {
+                                if (shift.equals("09.00-18.00")) {
+                                    shift = getAlternativeShift("09.00-18.00", "17.00-01.00");
+                                }
                             }
-                        }
 
-                        if (shift.equals("09.00-18.00") && morningCounts[day] >= MIN_MORNING_SHIFT) {
-                            shift = getAlternativeShift("09.00-18.00", "01.00-09.00");
-                        } else if (shift.equals("17.00-01.00") && afternoonCounts[day] >= MIN_AFTERNOON_SHIFT) {
-                            shift = getAlternativeShift("17.00-01.00", "09.00-18.00");
-                        } else if (shift.equals("01.00-09.00") && nightCounts[day] >= MIN_NIGHT_SHIFT) {
-                            shift = getAlternativeShift("01.00-09.00", "17.00-01.00");
-                        }
+                            if (shift.equals("09.00-18.00") && morningCounts[day] >= MIN_MORNING_SHIFT) {
+                                shift = getAlternativeShift("09.00-18.00", "17.00-01.00");
+                            } else if (shift.equals("17.00-01.00") && afternoonCounts[day] >= MIN_AFTERNOON_SHIFT) {
+                                shift = getAlternativeShift("17.00-01.00", "09.00-18.00");
+                            }
 
-                        employee.setShift(day, shift);
-                        updateShiftCounts(shift, day, morningCounts, afternoonCounts, nightCounts);
+                            employee.setShift(day, shift);
+                            updateShiftCounts(shift, day, morningCounts, afternoonCounts);
+                        }
+                        else{
+                            employee.setShift(day, "01.00-09.00");
+                            updateShiftCounts("01.00-09.00", day, morningCounts, afternoonCounts);
+                        }
                     }
                 }
+
             }
         }
+        previousShiftEmployees.clear();
+        previousShiftEmployees.addAll(NightShiftEmployees);
+
 
         int startRow = (week * (TOTAL_EMPLOYEES + ROWS_BETWEEN_WEEKS)) + 1;
         int headerRowNumber = startRow - 1;
@@ -182,6 +219,26 @@ public class Shift2 {
         int weekNumber = databasemanager.getNextWeekNumber() + week;
         databasemanager.saveShiftSummaryToDatabase(weekNumber, employees);
     }
+    private static List<Employee> getWeekendOffEmployees(List<Employee> employees, List<Employee> previousWeekendOffEmployees, Random random) {
+        List<Employee> weekendOffEmployees = new ArrayList<>();
+        List<Employee> availableEmployees = new ArrayList<>(employees);
+        availableEmployees.removeAll(previousWeekendOffEmployees);
+        availableEmployees.removeIf(employee -> employeeHasWeekendOff.getOrDefault(employee, false));
+        Collections.shuffle(availableEmployees, random);
+        weekendOffEmployees.add(availableEmployees.get(0));
+        weekendOffEmployees.add(availableEmployees.get(1));
+        return weekendOffEmployees;
+    }
+    private static List<Employee> getNightShiftEmployees(List<Employee> employees, List<Employee> previousShiftEmployees, Random random) {
+        List<Employee> NightShiftEmployees = new ArrayList<>();
+        List<Employee> availableEmployees1 = new ArrayList<>(employees);
+        availableEmployees1.removeAll(previousShiftEmployees);
+        availableEmployees1.removeIf(employee -> employeeHasShift.getOrDefault(employee, false));
+        Collections.shuffle(availableEmployees1, random);
+        NightShiftEmployees.add(availableEmployees1.get(0));
+        NightShiftEmployees.add(availableEmployees1.get(1));
+        return NightShiftEmployees;
+    }
     // Random day off assignment with a maximum of 3 people off per day, considering special leave days
     private static List<Integer> getRandomDaysOff(int totalDays, int daysOff, int[] offCounts, List<Integer> specialLeaveDays, Random random) {
         List<Integer> days = new ArrayList<>();
@@ -191,8 +248,11 @@ public class Shift2 {
             }
         }
         Collections.shuffle(days, random);
-        // Ensure we do not exceed the number of daysOff requested
-        return days.size() > daysOff ? days.subList(0, daysOff) : days;
+        List<Integer> selectedDays = new ArrayList<>();
+        for (int i = 0; i < daysOff && i < days.size(); i++) {
+            selectedDays.add(days.get(i));
+        }
+        return selectedDays;
     }
 
     // Get an alternative shift if the primary shift is overbooked or disallowed
@@ -206,7 +266,7 @@ public class Shift2 {
     }
 
     // Find a suitable shift that meets the daily requirements
-    private static String findSuitableShift(int day, int[] morningCounts, int[] afternoonCounts, int[] nightCounts) {
+    private static String findSuitableShift(int day, int[] morningCounts, int[] afternoonCounts) {
         if (morningCounts[day] < MIN_MORNING_SHIFT) {
             return "09.00-18.00";
         } else if (afternoonCounts[day] < MIN_AFTERNOON_SHIFT) {
@@ -217,16 +277,13 @@ public class Shift2 {
     }
 
     // Update shift counts for the day
-    private static void updateShiftCounts(String shift, int day, int[] morningCounts, int[] afternoonCounts, int[] nightCounts) {
+    private static void updateShiftCounts(String shift, int day, int[] morningCounts, int[] afternoonCounts) {
         switch (shift) {
             case "09.00-18.00":
                 morningCounts[day]++;
                 break;
             case "17.00-01.00":
                 afternoonCounts[day]++;
-                break;
-            case "01.00-09.00":
-                nightCounts[day]++;
                 break;
         }
     }
