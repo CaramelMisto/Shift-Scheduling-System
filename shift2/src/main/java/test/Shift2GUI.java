@@ -95,9 +95,9 @@ public class Shift2GUI extends JFrame {
     }
 
     private void initializeDatabaseConnection() throws SQLException {
-        String url = "jdbc:postgresql://localhost:5432/employees";
+        String url = "jdbc:postgresql://localhost:5432/Employees";
         String user = "postgres";
-        String password = "1234";
+        String password = "123";
         connection = DriverManager.getConnection(url, user, password);
     }
 

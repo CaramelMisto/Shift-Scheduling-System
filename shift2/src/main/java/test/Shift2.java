@@ -4,7 +4,6 @@ package test;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import repository.databasemanager;
-import java.util.stream.Collectors;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -19,7 +18,6 @@ import javax.swing.*;
 public class Shift2 {
     static final int TOTAL_DAYS = 7;
     private static final int TOTAL_EMPLOYEES = 8;
-    private static final String[] SHIFTS = {"09.00-18.00", "17.00-01.00"};
     public static final String[] DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"};
     private static final int MIN_MORNING_SHIFT = 2;
     private static final int MIN_AFTERNOON_SHIFT = 2;
@@ -142,7 +140,6 @@ public class Shift2 {
         }
 
         // Determine the employees who should receive weekday off days
-        List<Employee> employeesWithWeekendOff = new ArrayList<>(weekendOffEmployees);
         List<Employee> employeesWithoutWeekendOff = new ArrayList<>(employees);
         employeesWithoutWeekendOff.removeAll(weekendOffEmployees);
 
@@ -276,32 +273,6 @@ public class Shift2 {
         weekendOffEmployees.add(availableEmployees.get(1));
         return weekendOffEmployees;
     }
-    private static List<Employee> getNightShiftEmployees(List<Employee> employees, List<Employee> previousShiftEmployees, Random random) {
-        List<Employee> NightShiftEmployees = new ArrayList<>();
-        List<Employee> availableEmployees1 = new ArrayList<>(employees);
-        availableEmployees1.removeAll(previousShiftEmployees);
-        availableEmployees1.removeIf(employee -> employeeHasShift.getOrDefault(employee, false));
-        Collections.shuffle(availableEmployees1, random);
-        NightShiftEmployees.add(availableEmployees1.get(0));
-        NightShiftEmployees.add(availableEmployees1.get(1));
-        return NightShiftEmployees;
-    }
-    // Random day off assignment with a maximum of 3 people off per day, considering special leave days
-    private static List<Integer> getRandomDaysOff(int totalDays, int daysOff, int[] offCounts, List<Integer> specialLeaveDays, Random random) {
-        List<Integer> days = new ArrayList<>();
-        for (int i = 0; i < totalDays; i++) {
-            if (offCounts[i] < MAX_OFF_PER_DAY && !specialLeaveDays.contains(i)) {
-                days.add(i);
-            }
-        }
-        Collections.shuffle(days, random);
-        List<Integer> selectedDays = new ArrayList<>();
-        for (int i = 0; i < daysOff && i < days.size(); i++) {
-            selectedDays.add(days.get(i));
-        }
-        return selectedDays;
-    }
-
     // Get an alternative shift if the primary shift is overbooked or disallowed
     private static String getAlternativeShift(String currentShift, String... alternatives) {
         for (String shift : alternatives) {
