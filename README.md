@@ -98,9 +98,5 @@ You can modify various constraints and parameters directly in the code:
 - [Apache POI](https://poi.apache.org/) for Excel file creation.
 - PostgreSQL JDBC Driver.
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ---
 ![Ekran görüntüsü 2024-08-26 123229](https://github.com/user-attachments/assets/5be02da5-b266-4e80-abdc-f08c59f32897)
